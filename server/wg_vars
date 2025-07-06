@@ -1,0 +1,10 @@
+declare -r WIREGUARD_CONF_DIR='/etc/wireguard'
+declare -r WIREGUARD_INTERFACE='wg0'
+declare -r CONF="${WIREGUARD_CONF_DIR}/${WIREGUARD_INTERFACE}.conf"
+declare -r SERVER_PRIVATE_KEY_FILE="${WIREGUARD_CONF_DIR}/serv_priv"
+declare -r SERVER_PUBLIC_KEY_FILE="${WIREGUARD_CONF_DIR}/serv_pub"
+declare -r CLIENT_PRIVATE_KEY_FILE="${WIREGUARD_CONF_DIR}/client_priv"
+declare -r CLIENT_PUBLIC_KEY_FILE="${WIREGUARD_CONF_DIR}/client_pub"
+declare -r SERVER_PORT='51820'
+declare -r ALLOWED_IPS='' #To change depending on the vpn subnet
+declare -r SERVER_IP='' #To change depending on the Hard IP of the server.
