@@ -1,93 +1,105 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-### ─────────────────────────────────────────────────────────────
-### Vérification des privilèges root
-### ─────────────────────────────────────────────────────────────
+# Vérifier exécution en root
 if [ "$(id -u)" -ne 0 ]; then
   echo "Ce script doit être exécuté en tant que root." >&2
   exit 1
 fi
 
-### ─────────────────────────────────────────────────────────────
-### Variables à personnaliser
-### ─────────────────────────────────────────────────────────────
-NAS_IP="10.3.1.10"
-SMB_USER="jellyfinuser"
-SMB_PASS="jellyfinuser"
-CREDENTIALS_FILE="/etc/samba/credentials/jellyfin"
+# Si le user jellyfinuser n’existe pas, on le crée avec UID/GID 1001
+if ! id -u jellyfinuser &>/dev/null; then
+  groupadd -g 1001 jellyfinuser
+  useradd -u 1001 -g jellyfinuser -M -s /sbin/nologin jellyfinuser
+  echo "✔ Utilisateur Linux jellyfinuser (UID=1001) créé."
+fi
 
-### ─────────────────────────────────────────────────────────────
-### Préparation système
-### ─────────────────────────────────────────────────────────────
-echo "### Mise à jour et préparation du système"
+# Désactiver SELinux enforcing si nécessaire
+setenforce 0 || true
+
+# --- Saisie interactive des paramètres ---
+read -rp "IP de la VM NAS (ex. 192.168.56.128) : " VM2_IP
+
+read -rp "Utilisateur Samba à utiliser pour le montage (ex. jellyfinuser) : " SMB_USER
+read -srp "Mot de passe ${SMB_USER} : " SMB_PASS
+echo
+
+read -rp "PUID (UID local pour le montage, ex. 1001)   : " PUID
+read -rp "PGID (GID local pour le montage, ex. 1001)   : " PGID
+echo
+
+echo "### Paramètres sélectionnés :"
+echo "  • VM NAS        : ${VM2_IP}"
+echo "  • Samba user    : ${SMB_USER}"
+echo "  • PUID / PGID   : ${PUID} / ${PGID}"
+echo
+
+# Création de l’utilisateur local remtrer avec ces IDs
+if ! id -u "${SMB_USER}" &>/dev/null; then
+  echo "### Création du groupe ${SMB_USER} (GID=${PGID}) et de l’utilisateur ${SMB_USER} (UID=${PUID})"
+  groupadd -g "${PGID}" "${SMB_USER}"
+  useradd  -u "${PUID}" -g "${SMB_USER}" -M -s /sbin/nologin "${SMB_USER}"
+  echo "✔ Utilisateur système ${SMB_USER} créé."
+else
+  echo "ℹ️ L’utilisateur système ${SMB_USER} existe déjà, on ne le recrée pas."
+fi
+
+echo
+echo "### Mise à jour du système et RPM Fusion"
 dnf update -y
+dnf install -y dnf-plugins-core cifs-utils samba-client
 dnf config-manager --set-enabled crb
-
-echo "### Ajout des dépôts RPM Fusion"
 dnf install -y --nogpgcheck \
   https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-9.noarch.rpm \
   https://mirrors.rpmfusion.org/nonfree/el/rpmfusion-nonfree-release-9.noarch.rpm
-
 dnf update -y
 
-echo "### Installation des paquets Jellyfin et dépendances"
+echo "### Installation Jellyfin & dépendances"
 dnf install -y cifs-utils ffmpeg jellyfin
 
-### ─────────────────────────────────────────────────────────────
-### Vérification de la disponibilité du NAS
-### ─────────────────────────────────────────────────────────────
-echo "### Vérification de la disponibilité du NAS (${NAS_IP})"
-if ! ping -c1 "${NAS_IP}" &>/dev/null; then
-  echo "Erreur : le NAS ${NAS_IP} ne répond pas." >&2
-  exit 1
+# Configurer le chemin de ffmpeg
+FFMPEG_PATH=$(which ffmpeg)
+if [ -n "$FFMPEG_PATH" ] && [ -f /etc/jellyfin/system.xml ]; then
+  sed -i 's|<FFmpegPath>.*</FFmpegPath>|<FFmpegPath>'"$FFMPEG_PATH"'</FFmpegPath>|' \
+    /etc/jellyfin/system.xml
 fi
 
-### ─────────────────────────────────────────────────────────────
-### Configuration du montage Samba
-### ─────────────────────────────────────────────────────────────
 echo "### Montage du partage NAS"
 mkdir -p /mnt/media
-mkdir -p "$(dirname "${CREDENTIALS_FILE}")"
-chmod 700 "$(dirname "${CREDENTIALS_FILE}")"
 
-cat > "${CREDENTIALS_FILE}" <<EOF
+# Fichier de credentials pour le montage CIFS
+cat > /etc/cifs-credentials <<EOF
 username=${SMB_USER}
 password=${SMB_PASS}
 EOF
-chmod 600 "${CREDENTIALS_FILE}"
+chmod 600 /etc/cifs-credentials
 
-if ! grep -q "://${NAS_IP}/Media" /etc/fstab; then
-  echo "//${NAS_IP}/Media /mnt/media cifs credentials=${CREDENTIALS_FILE},uid=1000,gid=1000,iocharset=utf8,vers=3.0 0 0" >> /etc/fstab
-fi
+# Ligne fstab pour monter sous l’UID/GID de remtrer
+grep -q "^//${VM2_IP}/Media" /etc/fstab || cat >> /etc/fstab <<EOF
+//${VM2_IP}/Media /mnt/media cifs credentials=/etc/cifs-credentials,uid=${PUID},gid=${PGID},iocharset=utf8,vers=3.0 0 0
+EOF
 
-mount -a
-
+# Remontage
+systemctl daemon-reload
 if mountpoint -q /mnt/media; then
-  echo "✅ Montage du NAS réussi."
-else
-  echo "❌ Échec du montage du NAS." >&2
+  umount -l /mnt/media || true
+fi
+mount /mnt/media
+
+echo "### Vérification du montage"
+if ! mountpoint -q /mnt/media; then
+  echo "Erreur : impossible de monter //${VM2_IP}/Media" >&2
   exit 1
 fi
 
-### ─────────────────────────────────────────────────────────────
-### Activation et démarrage de Jellyfin
-### ─────────────────────────────────────────────────────────────
-echo "### Activation et démarrage de Jellyfin"
+echo "### Activation de Jellyfin"
 systemctl enable --now jellyfin
 
-### ─────────────────────────────────────────────────────────────
-### Configuration du pare-feu
-### ─────────────────────────────────────────────────────────────
-echo "### Ouverture des ports Jellyfin dans le pare-feu"
-firewall-cmd --permanent --add-port=8096/tcp
-firewall-cmd --permanent --add-port=8920/tcp
+echo "### Configuration du pare‐feu"
+for p in 8096/tcp 8920/tcp; do
+  firewall-cmd --permanent --add-port=${p}
+done
 firewall-cmd --reload
 
-### ─────────────────────────────────────────────────────────────
-### Affichage de l'URL d'accès à Jellyfin
-### ─────────────────────────────────────────────────────────────
-IP_ADDR=$(ip -4 addr show "$(ip route get 8.8.8.8 | awk '{print $5}')" \
-           | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n1)
-
-echo "✅ Jellyfin est prêt à l'adresse : http://${IP_ADDR}:8096"
+IP_HOST=$(hostname -I | awk '{print $2}')
+echo "✅ Jellyfin prêt → http://${IP_HOST}:8096"
