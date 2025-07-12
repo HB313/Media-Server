@@ -1,23 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Vérifier exécution en root
 if [ "$(id -u)" -ne 0 ]; then
   echo "Ce script doit être exécuté en tant que root." >&2
   exit 1
 fi
 
-# Si le user jellyfinuser n’existe pas, on le crée avec UID/GID 1001
 if ! id -u jellyfinuser &>/dev/null; then
   groupadd -g 1001 jellyfinuser
   useradd -u 1001 -g jellyfinuser -M -s /sbin/nologin jellyfinuser
   echo "✔ Utilisateur Linux jellyfinuser (UID=1001) créé."
 fi
 
-# Désactiver SELinux enforcing si nécessaire
 setenforce 0 || true
 
-# --- Saisie interactive des paramètres ---
 read -rp "IP de la VM NAS (ex. 192.168.56.128) : " VM2_IP
 
 read -rp "Utilisateur Samba à utiliser pour le montage (ex. jellyfinuser) : " SMB_USER
@@ -34,7 +30,6 @@ echo "  • Samba user    : ${SMB_USER}"
 echo "  • PUID / PGID   : ${PUID} / ${PGID}"
 echo
 
-# Création de l’utilisateur local remtrer avec ces IDs
 if ! id -u "${SMB_USER}" &>/dev/null; then
   echo "### Création du groupe ${SMB_USER} (GID=${PGID}) et de l’utilisateur ${SMB_USER} (UID=${PUID})"
   groupadd -g "${PGID}" "${SMB_USER}"
@@ -57,7 +52,6 @@ dnf update -y
 echo "### Installation Jellyfin & dépendances"
 dnf install -y cifs-utils ffmpeg jellyfin
 
-# Configurer le chemin de ffmpeg
 FFMPEG_PATH=$(which ffmpeg)
 if [ -n "$FFMPEG_PATH" ] && [ -f /etc/jellyfin/system.xml ]; then
   sed -i 's|<FFmpegPath>.*</FFmpegPath>|<FFmpegPath>'"$FFMPEG_PATH"'</FFmpegPath>|' \
@@ -67,19 +61,16 @@ fi
 echo "### Montage du partage NAS"
 mkdir -p /mnt/media
 
-# Fichier de credentials pour le montage CIFS
 cat > /etc/cifs-credentials <<EOF
 username=${SMB_USER}
 password=${SMB_PASS}
 EOF
 chmod 600 /etc/cifs-credentials
 
-# Ligne fstab pour monter sous l’UID/GID de remtrer
 grep -q "^//${VM2_IP}/Media" /etc/fstab || cat >> /etc/fstab <<EOF
 //${VM2_IP}/Media /mnt/media cifs credentials=/etc/cifs-credentials,uid=${PUID},gid=${PGID},iocharset=utf8,vers=3.0 0 0
 EOF
 
-# Remontage
 systemctl daemon-reload
 if mountpoint -q /mnt/media; then
   umount -l /mnt/media || true
