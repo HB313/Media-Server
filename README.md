@@ -1,7 +1,132 @@
 # Media-Server
 # 1
 
-# 2
+# 2 Installation du VPN - Wireguard 
+
+#### Tableau d'adressage : 
+
+|                  | Réseau interne | Réseau VPN     | Réseau admin |
+|------------------|----------------|----------------| ------------ |
+|Adresse du réseau | XXX.XXX.XXX.XXX| YYY.YYY.YYY.YYY| ZZZ.ZZZ.ZZZ.ZZZ |
+| Jellyfin         |  :white_check_mark:  |  :white_check_mark:  | :white_check_mark: |
+| Dowloader-stakc  |  :white_check_mark:  |  :white_check_mark:  | :white_check_mark: |
+| NAS              |  :white_check_mark:  |  :x:  | :white_check_mark: |
+
+Ayant constaté une difficulté à établir une communication via le Wireguard, sans configuration de notre part il est préférable utiliser un réseau interne réduit (en /29 par exemple) afin de lier les solutions au NAS/Samba.
+Nous pouvons ainsi en profiter pour isoler le NAS de l'extérieur. 
+
+### Installation de Wireguard - 
+
+Récupérer les dossiers cliens et serveur, il est préférable de les zipper (.zip) pour un meilleur transfert.
+Si jamais vous utiliser cette méthode, n'oubliez pas d'installer un outil pour gérer ce format de fichiers sur les machines :
+```
+dnf install zip -y 
+```
+
+#### 1. Côté serveur : 
+
+Déplacer tous les fichiers dans le homedir de root : 
+/!\ Les droits root sont requis pour exécuter les scripts /!\
+```
+sudo mv /server/* /root
+```
+
+Puis passage en utilisateur root : 
+```
+su -
+```
+
+Une fois dans le homedir de root : 
+Inspecter le fichier de variables afin de modifier les IP que vous souhaiterez utiliser en fonction de votre tableau d'adressage.
+```
+vi wg_vars
+
+declare -r ALLOWED_IPS='' #To change depending on the vpn subnet
+declare -r SERVER_IP='' #To change depending on the intern subnet IP of the server.
+```
+Ces deux lignes vous intéresseront.
+
+**Une fois les adresses affectées**
+
+```
+bash wg_srv_install.sh
+```
+
+Entrer une IP correspondante. 
+Une fois le script consommé, la clé publique qui est à partager à vos clients s'affichera, copiez la. 
+
+#### 2. Côté client : 
+
+Déplacer tous les fichiers dans le homedir de root : 
+/!\ Les droits root sont requis pour exécuter les scripts /!\
+```
+sudo mv /client/* /root
+```
+
+Puis passage en utilisateur root : 
+```
+su -
+```
+
+Inspecter le fichier de variables afin de modifier les IP que vous souhaiterez utiliser en fonction de votre tableau d'adressage.
+```
+vi wg_vars
+
+declare -r ALLOWED_IPS='' #To change depending on the vpn subnet
+declare -r SERVER_IP='' #To change depending on the intern subnet IP of the server.
+```
+Ces deux lignes vous intéresseront.
+
+**Une fois les adresses affectées**
+
+```
+bash wg_new_client.sh {server_pub_key}
+```
+
+Suivre le prompt, entrer une IP correspondante dans le réseau VPN. 
+A la fin, le script vous affichera la clée publique à partager à votre serveur. 
+
+#### Côté Serveur : 
+
+De nouveau du côté serveur  : 
+```
+bash wg_srv_add_peer.sh {client_pub_key} {client vpn subnet IP}
+```
+
+Rien de plus ne sera à faire ! 
+Votre client et votre serveur sont connectés. 
+Voici les commandes pour vérifier que tout se passe bien : 
+```
+wg #check the status of the interface
+wg-quick up {interface-name} # start the interface
+wg-quick up {interface-name} && wg-quick down {interface-name} #reload the interface
+```
+
+#### Ajout d'autres clients : 
+
+Répéter le premier script client : 
+```
+bash wg_new_client.sh {server pub_key}
+```
+Répéter le second script serveur : 
+```
+bash wg_srv_add_peer.sh {client pub_key} {client vpn subnet IP}
+```
+
+____ 
+
+Petit apparté si vous souhaitez que vos client puissent communiquer entre eux dans le LAN VPN, pour x ou y raison : 
+
+#### Sur le serveur : 
+```
+firewall-cmd --add-masquerade #A éviter car trop permissif
+```
+
+Et ajouter ces règles dans le fichier de configuration de l'interface wireguard : 
+```
+PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE;
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE;
+```
 
 # 3 Installation et configuration de la vm nas/Jellyfin/DL-stack
 ## A. Configuration et déploiement de la DL-stack
