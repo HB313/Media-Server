@@ -34,7 +34,7 @@ sudo dnf install -y dos2unix
 chmod +x setup_DL.sh
 dos2unix setup_DL.sh
 sudo mkdir -p /srv/dl-stack/config/{qbittorrent,sonarr,radarr,prowlarr,jellyseerr} 
-# il faut également mettre le fichier dockerr-compose.yml dans le dossier suivant /srv/dl-stack/
+# il faut également mettre le fichier docker-compose.yml dans le dossier suivant /srv/dl-stack/
 sudo ./setup_DL.sh
 
 ```
