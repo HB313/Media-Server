@@ -67,6 +67,7 @@ setfacl -R -d -m u:${JUSER}:rx,u:${DUSER}:rwx "${SHARE_DIR}"
 echo "### Activation de firewalld et ouverture de Samba"
 systemctl enable --now firewalld
 firewall-cmd --permanent --add-service=samba
+firewall-cmd --permanent --add-port=137/udp
 firewall-cmd --reload
 
 echo "### Écriture de /etc/samba/smb.conf"
