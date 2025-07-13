@@ -1,7 +1,5 @@
 # Media-Server
-# 1
-
-# 2 Installation du VPN - Wireguard 
+# 1 Installation du VPN - Wireguard 
 
 #### Tableau d'adressage : 
 
@@ -126,6 +124,101 @@ Et ajouter ces règles dans le fichier de configuration de l'interface wireguard
 ```
 PostUp   = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE;
 PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE;
+```
+
+# 2 Ajout du Reverse Proxy NGINX
+
+Voici le fichier de configuration de NGINX : 
+```
+server {
+    listen 80; #listening incomming traffic
+    server_name {QBITTORRENT.YOUR_DOMAIN_NAME}; #domain name
+
+    location /qbittorrent {
+        proxy_pass http://{VPN DOWNLOADER IP}:8080; # local address where traffic should be forwarded to.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80; #listening incomming traffic
+    server_name {RADARR.YOUR_DOMAIN_NAME}; #domain name
+
+    location /radarr {
+        proxy_pass http://{VPN DOWNLOADER IP}:7878; # local address where traffic should be forwarded to.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80; #listening incomming traffic
+    server_name {JELLYFIN.YOUR_DOMAIN_NAME}; #domain name
+
+    location /sonarr {
+        proxy_pass http://{VPN DOWNLOADER IP}:8989; # local address where traffic should be forwarded to.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80; #listening incomming traffic
+    server_name {PROWLARR.YOUR_DOMAIN_NAME}; #domain name
+
+    location /prowlarr {
+        proxy_pass http://{VPN DOWLOADER IP}:9696; # local address where traffic should be forwarded to.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80; #listening incomming traffic
+    server_name {JELLYSEERR.YOUR_DOMAIN_NAME}; #domain name
+
+    location /jellyseerr {
+        proxy_pass http://{VPN DOWNLOADER IP}:5055; # local address where traffic should be forwarded to.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80; #listening incomming traffic
+    server_name {JELLYFIN.YOUR_DOMAIN_NAME}; #domain name
+
+    location /jellyfin {
+
+        proxy_pass http://{VPN JELLYFIN IP}:8096/jellyfin/;
+
+        proxy_pass_request_headers on;
+
+        proxy_set_header Host $host;
+
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $http_host;
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $http_connection;
+
+        # Disable buffering when the nginx proxy gets very resource heavy upon streaming
+        proxy_buffering off;
+    }
+}
 ```
 
 # 3 Installation et configuration de la vm nas/Jellyfin/DL-stack
