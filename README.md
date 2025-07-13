@@ -3,7 +3,42 @@
 
 # 2
 
-# 3 📡 Documentation Technique : Connexions entre les Services Media (Sonarr, Radarr, Prowlarr, Jellyfin, Jellyseerr, qBittorrent, NZBgeek)
+# 3 Installation et configuration de la vm nas/Jellyfin/DL-stack
+## A. Configuration et déploiement de la DL-stack
+### 1. NAS
+```
+sudo dnf install -y dos2unix
+chmod +x setup_nas.sh
+dos2unix setup_nas.sh
+sudo ./setup_nas.sh
+sudo systemctl daemon-reload  # au besoin
+```
+
+⚠️ Note : le PUID et le PGID de l’utilisateur Samba défini ici doivent correspondre aux valeurs utilisées dans le docker-compose.yml de la DL-stack.
+
+
+
+### 2. Jellyfin
+```
+sudo dnf install -y dos2unix
+chmod +x setup_jellyfin.sh
+dos2unix setup_jellyfin.sh
+sudo ./setup_jellyfin.sh
+```
+
+
+### 3. DL-stack (Download Stack)
+
+```
+sudo dnf install -y dos2unix
+chmod +x setup_DL.sh
+dos2unix setup_DL.sh
+sudo mkdir -p /srv/dl-stack/config/{qbittorrent,sonarr,radarr,prowlarr,jellyseerr} 
+# il faut également mettre le fichier dockerr-compose.yml dans le dossier suivant /srv/dl-stack/
+sudo ./setup_DL.sh
+
+```
+## B. 📡 Documentation Technique : Connexions entre les Services Media (Sonarr, Radarr, Prowlarr, Jellyfin, Jellyseerr, qBittorrent, NZBgeek)
 
 ## 🧭 Objectif
 
@@ -21,7 +56,7 @@ v
 v
 [Jellyfin]
 
-## 1 Prowlarr <--> Sonarr / Radarr
+### 1 Prowlarr <--> Sonarr / Radarr
 
 ### Rôle :
 - Fournit les indexeurs à Sonarr et Radarr.
@@ -37,7 +72,7 @@ v
 
 ---
 
-## 2 Sonarr / Radarr <--> qBittorrent
+### 2 Sonarr / Radarr <--> qBittorrent
 
 ### Rôle :
 - Sonarr et Radarr envoient les tâches de téléchargement à qBittorrent.
@@ -54,7 +89,7 @@ v
 
 ---
 
-## 3 Jellyseerr <--> Sonarr / Radarr
+### 3 Jellyseerr <--> Sonarr / Radarr
 
 ### Rôle :
 - Jellyseerr transmet les demandes de contenu aux gestionnaires (Sonarr pour les séries, Radarr pour les films).
@@ -69,7 +104,7 @@ v
 
 ---
 
-## 4 Jellyseerr <--> Jellyfin
+### 4 Jellyseerr <--> Jellyfin
 
 ### Rôle :
 - Jellyseerr synchronise les bibliothèques et utilisateurs avec Jellyfin.
